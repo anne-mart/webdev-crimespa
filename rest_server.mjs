@@ -16,6 +16,13 @@ let app = express();
 app.use(express.static(public_dir));
 app.use(express.json());
 
+
+
+app.get('/map', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'map.html'));
+});
+
+
 /********************************************************************
  ***   DATABASE FUNCTIONS                                         *** 
  ********************************************************************/
