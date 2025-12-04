@@ -15,18 +15,7 @@ const port = 8080;
 let app = express();
 app.use(express.static(public_dir));
 app.use(express.json());
-
-
-
-app.get('/map', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'map.html'));
-});
-
-
-/********************************************************************
- ***   DATABASE FUNCTIONS                                         *** 
- ********************************************************************/
-// Open SQLite3 database (in read-write mode)
+app.use('/data', express.static(path.join(__dirname, 'data')));
 let db = new sqlite3.Database(dbFile, sqlite3.OPEN_READWRITE, (err) => {
     if (err) {
         console.log('Error opening ' + path.basename(dbFile));
@@ -36,7 +25,41 @@ let db = new sqlite3.Database(dbFile, sqlite3.OPEN_READWRITE, (err) => {
     }
 });
 
-// Create Promise for SQLite3 database SELECT query 
+app.get('/map', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'map.html'));
+    
+});
+
+
+app.get('/incidents-expanded', (req, res) => {
+    let sql = `
+        SELECT 
+            i.case_number,
+            DATE(i.date_time) as date,
+            TIME(i.date_time) as time,
+            i.code,
+            c.incident_type,
+            i.police_grid,
+            i.neighborhood_number,
+            n.neighborhood_name,
+            i.block
+        FROM Incidents i
+        JOIN Neighborhoods n ON i.neighborhood_number = n.neighborhood_number
+        JOIN Codes c ON i.code = c.code
+        ORDER BY i.date_time DESC
+        LIMIT 1000;
+    `;
+
+    db.all(sql, [], (err, rows) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+
+        res.json(rows);
+    });
+});
+
 function dbSelect(query, params) {
     return new Promise((resolve, reject) => {
         db.all(query, params, (err, rows) => {
@@ -50,7 +73,6 @@ function dbSelect(query, params) {
     });
 }
 
-// Create Promise for SQLite3 database INSERT or DELETE query
 function dbRun(query, params) {
     return new Promise((resolve, reject) => {
         db.run(query, params, (err) => {

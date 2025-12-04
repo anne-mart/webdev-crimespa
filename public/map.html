@@ -1,28 +1,125 @@
 <!DOCTYPE html>
-<html>
 <head>
-    <meta charset="utf-8" />
-    <title>Leaflet Map</title>
+    <meta charset="utf-8">
+    <title>St. Paul Crime Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
     <style>
-        #map {
-            height: 600px;
-            width: 100%;
-        }
+        body { margin:0; padding:20px; font-family:Arial,sans-serif; background:#f8f9fa; }
+        #map { height:680px; width:100%; border:3px solid #2c3e50; border-radius:10px; }
+        h1 { text-align:center; color:#2c3e50; margin-bottom:10px; }
+        h2 { margin-top:30px; color:#34495e; }
+        table { width:100%; border-collapse:collapse; background:white; box-shadow:0 3px 10px rgba(0,0,0,0.1); }
+        th, td { padding:10px; border:1px solid #ddd; text-align:left; }
+        th { background:#2c3e50; color:white; }
+        #count { font-weight:bold; color:#d31a3f; }
     </style>
 </head>
 <body>
-    <h1>St. Paul Crime Map</h1>
-    <div id="map"></div>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <script>
-        const map = L.map('map').setView([44.9537, -93.0900], 12); // St. Paul center
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap'
+<h1>St. Paul Crime Map</h1>
+<div id="map"></div>
+<h2>Crimes in Visible Neighborhoods <span id="count">(loading...)</span></h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>Case #</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Code</th>
+            <th>Type</th>
+            <th>Neighborhood</th>
+            <th>Block</th>
+        </tr>
+    </thead>
+    <tbody id="crime-tbody"></tbody>
+</table>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const map = L.map('map').setView([44.9537, -93.0900], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    let allCrimes = [];
+    let something = null;
+    let markers = L.layerGroup().addTo(map);
+
+    async function start() {
+        const geoRes = await fetch('data/StPaulDistrictCouncil.geojson'); // load neighborhoods here...
+        const geojson = await geoRes.json();
+        something = L.geoJSON(geojson, {
+            style: { color: "#3498db", weight: 2, fillOpacity: 0.1 },
+            onEachFeature: (feature, layer) => {
+                const p = feature.properties;
+                const number = Number(p.district); 
+                const name   = p.name1 || "Unknown";        
+
+                layer._hoodNumber = number;
+                layer.bindTooltip(name, { permanent: false, sticky: true, direction: "center" });
+            }
         }).addTo(map);
-    </script>
+
+        map.fitBounds(something.getBounds());
+
+        // getting crimes...
+        const crimeRes = await fetch('/incidents-expanded');
+        allCrimes = await crimeRes.json();
+        document.getElementById('count').textContent = '(zoom in to see crimes)';
+        update();
+    }
+    function getVisibleHoods() { // function to see which neighborhoods are visible
+        if (!something) return [];
+        const bounds = map.getBounds();
+        const set = new Set();
+        something.eachLayer(layer => {
+            if (layer._hoodNumber && bounds.intersects(layer.getBounds())) {
+                set.add(layer._hoodNumber);
+            }
+        });
+        return Array.from(set);
+    }
+    function update() {
+        const visible = getVisibleHoods();
+        const crimes = allCrimes
+            .filter(c => visible.includes(Number(c.neighborhood_number)))
+            .sort((a,b) => new Date(b.date+' '+b.time) - new Date(a.date+' '+a.time));
+        const tbody = document.getElementById('crime-tbody');
+        tbody.innerHTML = '';
+        crimes.slice(0,200).forEach(c => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${c.case_number}</td>
+                    <td>${c.date}</td>
+                    <td>${c.time}</td>
+                    <td>${c.code}</td>
+                    <td>${c.incident_type}</td>
+                    <td>${c.neighborhood_name}</td>
+                    <td>${c.block}</td>
+                </tr>`;
+        });
+        document.getElementById('count').textContent = `(${crimes.length} visible)`;
+        markers.clearLayers();
+        const counts = {};
+        crimes.forEach(c => counts[Number(c.neighborhood_number)] = (counts[Number(c.neighborhood_number)] || 0) + 1);
+
+        something.eachLayer(layer => {
+            const n = layer._hoodNumber;
+            if (n && counts[n]) {
+                const center = layer.getBounds().getCenter();
+                L.circleMarker(center, {
+                    radius: Math.min(30, 8 + counts[n]),
+                })
+                .bindPopup(`<b>${layer.getTooltip().getContent()}</b><br>${counts[n]} crimes`)
+                .addTo(markers);
+            }
+        });
+    }
+    start();
+    map.on('moveend', update);
+</script>
+
 </body>
 </html>
