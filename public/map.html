@@ -13,12 +13,41 @@
         th, td { padding:10px; border:1px solid #ddd; text-align:left; }
         th { background:#2c3e50; color:white; }
         #count { font-weight:bold; color:#d31a3f; }
+
+        #legend {
+            margin: 15px 0;
+            padding: 10px 15px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            width: fit-content;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+        .legend-item {
+            display:flex;
+            align-items:center;
+            margin-bottom:6px;
+            font-size:14px;
+        }
+        .legend-color {
+            width:18px;
+            height:18px;
+            border-radius:4px;
+            margin-right:8px;
+            border:1px solid #888;
+        }
     </style>
 </head>
 <body>
 
 <h1>St. Paul Crime Map</h1>
 <div id="map"></div>
+<div id="legend">
+    <div class="legend-item"><div class="legend-color" style="background:#ff000022;"></div>Violent Crimes</div>
+    <div class="legend-item"><div class="legend-color" style="background:#0000ff22;"></div>Property Crimes</div>
+    <div class="legend-item"><div class="legend-color" style="background:#00aa0022;"></div>Other Crimes</div>
+</div>
+
 <h2>Crimes in Visible Neighborhoods <span id="count">(loading...)</span></h2>
 
 <table>
@@ -48,14 +77,14 @@
     let markers = L.layerGroup().addTo(map);
 
     async function start() {
-        const geoRes = await fetch('data/StPaulDistrictCouncil.geojson'); // load neighborhoods here...
+        const geoRes = await fetch('data/StPaulDistrictCouncil.geojson');
         const geojson = await geoRes.json();
         something = L.geoJSON(geojson, {
             style: { color: "#3498db", weight: 2, fillOpacity: 0.1 },
             onEachFeature: (feature, layer) => {
                 const p = feature.properties;
-                const number = Number(p.district); 
-                const name   = p.name1 || "Unknown";        
+                const number = Number(p.district);
+                const name = p.name1 || "Unknown";
 
                 layer._hoodNumber = number;
                 layer.bindTooltip(name, { permanent: false, sticky: true, direction: "center" });
@@ -70,7 +99,36 @@
         document.getElementById('count').textContent = '(zoom in to see crimes)';
         update();
     }
-    function getVisibleHoods() { // function to see which neighborhoods are visible
+    function categorizeCrime(type) {
+        const t = type.toUpperCase();
+
+        // Violent crimes ... light red
+        if (t.includes("HOMICIDE") ||
+            t.includes("MURDER") ||
+            t.includes("ROBBERY") ||
+            t.includes("ASSAULT") ||
+            t.includes("SEX") ||
+            t.includes("RAPE") ||
+            t.includes("KIDNAP")) {
+            return "#ff000022";
+        }
+
+        // Property crimes... light blue
+        if (t.includes("BURGLARY") ||
+            t.includes("THEFT") ||
+            t.includes("LARCENY") ||
+            t.includes("VANDALISM") ||
+            t.includes("DAMAGE") ||
+            t.includes("ARSON") ||
+            t.includes("FRAUD") ||
+            t.includes("FORGERY")) {
+            return "#0000ff22";
+        }
+
+        // Other... light green
+        return "#00aa0022";
+    }
+    function getVisibleHoods() {
         if (!something) return [];
         const bounds = map.getBounds();
         const set = new Set();
@@ -85,12 +143,13 @@
         const visible = getVisibleHoods();
         const crimes = allCrimes
             .filter(c => visible.includes(Number(c.neighborhood_number)))
-            .sort((a,b) => new Date(b.date+' '+b.time) - new Date(a.date+' '+a.time));
+            .sort((a,b) => new Date(b.date + ' ' + b.time) - new Date(a.date + ' ' + a.time));
         const tbody = document.getElementById('crime-tbody');
         tbody.innerHTML = '';
-        crimes.slice(0,200).forEach(c => {
+        crimes.slice(0, 200).forEach(c => {
+            const color = categorizeCrime(c.incident_type);
             tbody.innerHTML += `
-                <tr>
+                <tr style="background-color:${color}">
                     <td>${c.case_number}</td>
                     <td>${c.date}</td>
                     <td>${c.time}</td>
@@ -103,20 +162,29 @@
         document.getElementById('count').textContent = `(${crimes.length} visible)`;
         markers.clearLayers();
         const counts = {};
-        crimes.forEach(c => counts[Number(c.neighborhood_number)] = (counts[Number(c.neighborhood_number)] || 0) + 1);
+        crimes.forEach(c => {
+            const n = Number(c.neighborhood_number);
+            counts[n] = (counts[n] || 0) + 1;
+        });
 
         something.eachLayer(layer => {
             const n = layer._hoodNumber;
             if (n && counts[n]) {
                 const center = layer.getBounds().getCenter();
+                const sampleCrime = crimes.find(c => Number(c.neighborhood_number) === n);
+                const color = categorizeCrime(sampleCrime.incident_type).replace("22", "ff");
                 L.circleMarker(center, {
                     radius: Math.min(30, 8 + counts[n]),
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.7,
                 })
                 .bindPopup(`<b>${layer.getTooltip().getContent()}</b><br>${counts[n]} crimes`)
                 .addTo(markers);
             }
         });
     }
+
     start();
     map.on('moveend', update);
 </script>
