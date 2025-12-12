@@ -3,6 +3,10 @@ import { reactive, ref, onMounted } from 'vue'
 
 let crime_url = ref('');
 let dialog_err = ref(false);
+let dialog_closed = ref(false);
+let show_filters = ref(false);
+let incidents = ref([]);
+
 let map = reactive(
     {
         leaflet: null,
@@ -72,6 +76,15 @@ onMounted(() => {
 function initializeCrimes() {
     // TODO: get code and neighborhood data
     //       get initial 1000 crimes
+    fetch(`${crime_url.value}/incidents`)
+        .then(res => res.json())
+        .then(data => {
+            incidents.value = data;
+            console.log(incidents.value);
+        })
+        .catch((error) => {
+            console.log('Error:', error);
+        });
 }
 
 // Function called when user presses 'OK' on dialog box
@@ -81,15 +94,23 @@ function closeDialog() {
     if (crime_url.value !== '' && url_input.checkValidity()) {
         dialog_err.value = false;
         dialog.close();
+        dialog_closed.value = true;
         initializeCrimes();
     }
     else {
         dialog_err.value = true;
     }
 }
+
+function showHideFilters() {
+    show_filters.value = !show_filters.value;
+    console.log(show_filters.value);
+}
+
 </script>
 
 <template>
+
     <dialog id="rest-dialog" open>
         <h1 class="dialog-header">St. Paul Crime REST API</h1>
         <label class="dialog-label">URL: </label>
@@ -98,9 +119,82 @@ function closeDialog() {
         <br/>
         <button class="button" type="button" @click="closeDialog">OK</button>
     </dialog>
-    <div class="grid-container ">
-        <div class="grid-x grid-padding-x">
-            <div id="leafletmap" class="cell auto"></div>
+
+    <div  class="grid-container">
+        <div class="grid-x grid-padding-x grid-padding-y">  
+            <h1>St. Paul Crime Incidents</h1>
+        </div>
+
+        <!-- Incident Filters -->
+        <div class="grid-x grid-padding-x grid-padding-y">
+            <div id="filters" class="cell auto small-12">
+                <h2>Filters</h2>
+                <button type="button" @click="showHideFilters" v-if="show_filters">Hide Filters ^</button>
+                <button type="button" @click="showHideFilters" v-if="!show_filters">Show Filters v</button>
+                <div v-if="show_filters">
+                    <ul>
+                        <li>TEST</li>
+                        <li>TEST</li>
+                        <li>TEST</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map & Table -->
+        <div class="grid-x grid-padding-x grid-padding-y">
+            <div class="cell auto small-12">
+                <h2>Map</h2>
+            </div>
+            <div id="leafletmap" class="cell auto small-12 large-6"></div>
+            <div id="" class="cell auto small-12 large-6">
+                <h2>TEST</h2>
+            </div>
+        </div>
+
+
+        <div class="grid-x grid-padding-x grid-padding-y">
+            <div class="cell auto small-12">
+                <h2>Incidents Table</h2>
+            </div>
+
+            <!-- Remove Incident Section -->
+            <div class="cell auto small-12">
+                <label for="case_input">Case Number to Remove:</label>
+                <input id="case_input" type="text" placeholder="Enter case number">
+                <button id="remove-btn" type="button">Remove Incident</button>
+                <p id="remove-result"></p>
+            </div>
+
+            <!-- Incident Table -->
+            <div class="cell auto small-12">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Case #</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Code</th>
+                            <th>Incident</th>
+                            <th>Grid</th>
+                            <th>Neighborhood</th>
+                            <th>Block</th>
+                        </tr>
+                    </thead>
+                    <tbody id="incident-tbody">
+                        <tr v-for="inc in incidents">
+                            <td>{{inc.case_number}}</td>
+                            <td>{{inc.date}}</td>
+                            <td>{{inc.time}}</td>
+                            <td>{{inc.code}}</td>
+                            <td>{{inc.incident}}</td>
+                            <td>{{inc.police_grid}}</td>
+                            <td>{{inc.neighborhood_number}}</td>
+                            <td>{{inc.block}}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </template>
@@ -133,5 +227,10 @@ function closeDialog() {
 .dialog-error {
     font-size: 1rem;
     color: #D32323;
+}
+
+h2 {
+    font-size: 2rem;
+    color: #8923bf;
 }
 </style>

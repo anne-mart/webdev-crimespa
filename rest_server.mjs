@@ -3,6 +3,7 @@ import * as url from 'node:url';
 
 import { default as express } from 'express';
 import { default as sqlite3 } from 'sqlite3';
+import cors from 'cors';
 
 let public_dir = './public';
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
@@ -10,9 +11,8 @@ const dbFile = path.join(__dirname, 'db', 'stpaul_crime.sqlite3');
 
 const port = 8080;
 
-// let app = express();
-// app.use(express.json());
 let app = express();
+app.use(cors());
 app.use(express.static(public_dir));
 app.use(express.json());
 app.use('/data', express.static(path.join(__dirname, 'data')));
