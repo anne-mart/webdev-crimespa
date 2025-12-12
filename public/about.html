@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>About the Project – St. Paul Crime Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f7f7f7;
+            color: #333;
+        }
+
+        h1, h2 {
+            text-align: center;
+            color: #2c3e50;
+        }
+
+        .team {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 40px;
+        }
+
+        .member {
+            background: white;
+            border-radius: 10px;
+            width: 260px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+
+        .member img {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        .tools, .findings {
+            width: 90%;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+
+        iframe {
+            display: block;
+            margin: 30px auto;
+            border: none;
+            width: 80%;
+            height: 400px;
+            border-radius: 10px;
+        }
+
+        a {
+            color: #2c3e50;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>About the Project</h1>
+
+<h2>Meet the Team</h2>
+
+<div class="team">
+
+    <div class="member">
+        <img src="images/Roster.webp" alt="Team Member 1">
+        <h3>Sean McNiesh</h3>
+        <p>Created the new Incident Form, About the project page, Delete button, and Map Marker</p>
+    </div>
+
+    <div class="member">
+        <img src="images/member2.jpg" alt="Team Member 2">
+        <h3>Member 2 Name</h3>
+        <p>Short bio goes here describing their role and what they contributed.</p>
+    </div>
+
+    <div class="member">
+        <img src="images/member3.jpg" alt="Team Member 3">
+        <h3>Member 3 Name</h3>
+        <p>Short bio goes here describing their role and what they contributed.</p>
+    </div>
+
+</div>
+
+<h2>Tools & Technologies Used</h2>
+
+<div class="tools">
+    <ul>
+        <li><strong>Leaflet.js</strong> – for interactive crime mapping</li>
+        <li><strong>Express.js</strong> – to build the REST API backend</li>
+        <li><strong>SQLite</strong> – database for crime incidents</li>
+        <li><strong>Node.js</strong> – server runtime environment</li>
+        <li><strong>OpenStreetMap Tiles</strong> – map imagery</li>
+        <li><strong>HTML/CSS/JavaScript</strong> – frontend structure and UI</li>
+        <li><strong>YouTube</strong> – video hosting for the project demo</li>
+    </ul>
+</div>
+
+<h2>Video Demo</h2>
+
+<!-- Replace YOUR_VIDEO_ID -->
+<iframe 
+    src="https://www.youtube.com/embed/YOUR_VIDEO_ID" 
+    allowfullscreen>
+</iframe>
+
+<h2>Six Interesting Findings</h2>
+
+<div class="findings">
+    <ol>
+        <li>Finding #1—replace with something discovered using your map.</li>
+        <li>Finding #2.</li>
+        <li>Finding #3.</li>
+        <li>Finding #4.</li>
+        <li>Finding #5.</li>
+        <li>Finding #6.</li>
+    </ol>
+</div>
+
+</body>
+</html>
