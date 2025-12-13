@@ -7,11 +7,17 @@ let dialog_closed = ref(false);
 let incidents = ref([]);
 let map_search_text = ref('');
 let map_search_loading = ref(false);
+let selectedMarker = null;
 
-let selected_marker = ref(null);
+let filter_murder = ref(false);
+let filter_robbery = ref(false);
+let filter_assault = ref(false);
+let filter_burglary = ref(false);
+let filter_theft = ref(false);
+let filter_arson = ref(false);
+let filter_graffiti = ref(false);
+let filter_narcotics = ref(false);
 
-let allCrimes = [];
-let something = null;
 
 let map = reactive(
     {
@@ -81,7 +87,7 @@ onMounted(() => {
 
 // FUNCTIONS
 // Function called once user has entered REST API URL
-function initializeCrimes() {
+async function initializeCrimes() {
     // TODO: get code and neighborhood data
     //       get initial 1000 crimes
     fetch(`${crime_url.value}/incidents-expanded`)
@@ -139,28 +145,165 @@ function categorizeCrime(type) {
     return { backgroundColor: '#00aa0022' };
 }
 
-function deleteIncident(case_number) {
-    console.log("Deleting incident: " + case_number);
-    if (!confirm(`Delete incident ${case_number}?`)) return;
+async function deleteIncident(caseNumber) {
+    if (!confirm(`Delete incident ${caseNumber}?`)) return;
 
-    fetch(`${crime_url.value}/remove-incident`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ case_number: case_number })
-    })
-        .then(res => {
-            if (res.status === 200) {
-                alert("Incident deleted!");
-
-                initializeCrimes();
-            } else {
-                alert("Delete failed: " + res.statusText);
-            }
-        })
-        .catch((error) => {
-            console.log('Error:', error);
+    try {
+        const response = await fetch(`${crime_url.value}/remove-incident`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ case_number: caseNumber })
         });
+
+        const text = await response.text();
+
+        if (text === "success") {
+            alert("Incident deleted!");
+
+            initializeCrimes();
+        } else {
+            alert("Delete failed: " + text);
+        }
+    } catch (err) {
+        alert("Network error: " + err);
+    }
 }
+
+async function selectCrime(caseNumber, block, date, time, incident) {
+    // Remove old marker if it exists
+    if (selectedMarker) {
+        map.leaflet.removeLayer(selectedMarker);
+        selectedMarker = null;
+    }
+
+    // Convert "98X UNIVERSITY AV W" → "980 UNIVERSITY AV W"
+    const cleanedAddress = cleanAddress(block);
+
+    // Geocode the address (using Nominatim)
+    const geo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanedAddress + ", St Paul MN")}`);
+    const results = await geo.json();
+
+    if (results.length === 0) {
+        alert("Could not locate address on map: " + cleanedAddress);
+        return;
+    }
+
+    const { lat, lon } = results[0];
+
+    // Custom marker icon (blue)
+    const icon = L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
+    });
+
+    selectedMarker = L.marker([lat, lon], { icon }).addTo(map.leaflet);
+
+    selectedMarker.bindPopup(`
+        <b>${incident}</b><br>
+        Date: ${date}<br>
+        Time: ${time}<br>
+        Location: ${cleanedAddress}<br><br>
+        <button onclick="deleteIncident('${caseNumber}')"
+                style="background:#c0392b; color:white; border:none; padding:6px 12px; border-radius:5px; cursor:pointer;">
+            Delete Incident
+        </button>
+    `).openPopup();
+
+    map.leaflet.setView([lat, lon], 16);
+}
+
+function cleanAddress(raw) {
+    let address = raw.trim();
+    if (/ AND /i.test(address) || / & /i.test(address)) {
+        let sep = / AND /i.test(address) ? / AND /i : / & /i;
+        let [street1, street2] = address.split(sep).map(s => s.trim());
+        if (!/\b(ST|AVE|AV|RD|DR|BLVD|LN|PKWY|PL|CT|WAY)\b/i.test(street2)) {
+            street2 += " AVE";
+        }
+        address = `${street1} & ${street2}`;
+    }
+    let parts = address.split(" ");
+    if (parts.length > 0) {
+        let num = parts[0];
+        if (/^\d+X$/.test(num)) {
+            num = num.replace("X", "0");
+        } else if (/^\d+X+$/.test(num)) {
+            num = num.replace(/X+/g, match => "0".repeat(match.length));
+        }
+        parts[0] = num;
+    }
+    const dirMap = { N:"NORTH", S:"SOUTH", E:"EAST", W:"WEST" };
+    parts = parts.map(tok => dirMap[tok.toUpperCase()] || tok);
+    parts = parts.map(tok => {
+        if (/^(ST|MT|FT)[A-Z]{2,}/.test(tok)) {
+            return tok.slice(0, tok.match(/^(ST|MT|FT)/)[0].length) + " " + tok.slice(tok.match(/^(ST|MT|FT)/)[0].length);
+        }
+        return tok;
+    });
+
+    return parts.join(" ");
+}
+
+async function submitForm (e) {
+    // event automatically prevented by @submit.prevent
+
+    const msg = document.getElementById("form-message");
+    msg.textContent = "";
+
+    // Collect form fields
+    const data = {
+        case_number: document.getElementById("f-case").value.trim(),
+        date: document.getElementById("f-date").value,
+        time: document.getElementById("f-time").value,
+        code: document.getElementById("f-code").value,
+        incident: document.getElementById("f-incident").value.trim(),
+        police_grid: document.getElementById("f-grid").value,
+        neighborhood_number: document.getElementById("f-hood").value,
+        block: document.getElementById("f-block").value.trim()
+    };
+
+    // Validate (simple)
+    for (let key in data) {
+        if (!data[key]) {
+            msg.style.color = "red";
+            msg.textContent = `Error: Missing required field "${key}"`;
+            return;
+        }
+    }
+
+    // PUT request
+    try {
+        const res = await fetch(`${crime_url.value}/new-incident`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            msg.style.color = "red";
+            msg.textContent = "Upload failed: " + err.error;
+            return;
+        }
+
+        msg.style.color = "green";
+        msg.textContent = "Incident successfully added!";
+
+        // Refresh data on map + table
+        const crimeRes = await fetch('/incidents-expanded');
+        incidents = await crimeRes.json();
+        update();
+
+        e.target.reset();
+
+    } catch (err) {
+        msg.style.color = "red";
+        msg.textContent = "Network error: " + err;
+    }
+}
+
 
 
 function searchMap() {
@@ -176,6 +319,59 @@ function searchMap() {
             map_search_loading.value = false;
         })
 }
+
+function applyFilters() {
+    let codes = [];
+    if (filter_murder.value) {
+        for (let i = 100; i < 200; i++)
+            codes.push(i);
+    }
+    if (filter_robbery.value) {
+        for (let i = 300; i < 400; i++)
+            codes.push(i);
+    }
+    if (filter_assault.value) {
+        for (let i = 400; i < 500; i++)
+            codes.push(i);
+    }
+    if (filter_burglary.value) {
+        for (let i = 500; i < 600; i++)
+            codes.push(i);
+    }
+    if (filter_theft.value) {
+        for (let i = 600; i < 800; i++)
+            codes.push(i);
+    }
+    if (filter_arson.value) {
+        for (let i = 900; i < 1000; i++)
+            codes.push(i);
+    }
+    if (filter_graffiti.value) {
+        for (let i = 1400; i < 1500; i++)
+            codes.push(i);
+    }
+    if (filter_narcotics.value) {
+        for (let i = 1800; i < 1900; i++)
+            codes.push(i);
+    }
+    if (codes.length !== 0) {
+        codes = 'code='+codes.toString();
+    }
+
+    console.log(codes);
+    
+    fetch(`${crime_url.value}/incidents-expanded?${codes}`)
+        .then(res => res.json())
+        .then(data => {
+            incidents.value = data;
+            console.log(incidents.value);
+        })
+        .catch((error) => {
+            console.log('Error:', error);
+        });
+}
+
+
 
 </script>
 
@@ -222,7 +418,7 @@ function searchMap() {
                 <!-- Incident Form -->
                 <div class="custom-card cell auto small-12 large-6">
                     <h2>Submit New Crime Incident</h2>
-                    <form id="incident-form">
+                    <form id="incident-form" @submit.prevent="submitForm">
                         
                         <label>Case Number (required)<br>
                             <input id="f-case" required>
@@ -267,11 +463,41 @@ function searchMap() {
                 <div class="custom-card cell auto small-12 large-6" style="margin-left:auto;">
                     <h2>Filters</h2>
                     <div>
-                        <ul>
-                            <li>TEST</li>
-                            <li>TEST</li>
-                            <li>TEST</li>
-                        </ul>
+                        <p>Incident Type</p>
+                        <input type="checkbox" v-model="filter_murder"/>
+                            <label for="checkbox">Murder</label><br>
+                        <input type="checkbox" v-model="filter_robbery"/>
+                            <label for="checkbox">Robbery</label><br>
+                        <input type="checkbox" v-model="filter_assault"/>
+                            <label for="checkbox">Assault</label><br>
+                        <input type="checkbox" v-model="filter_burglary"/>
+                            <label for="checkbox">Burglary</label><br>
+                        <input type="checkbox" v-model="filter_theft"/>
+                            <label for="checkbox">Theft</label><br>
+                        <input type="checkbox" v-model="filter_arson"/>
+                            <label for="checkbox">Arson</label><br>
+                        <input type="checkbox" v-model="filter_graffiti"/>
+                            <label for="checkbox">Graffiti</label><br>
+                        <input type="checkbox" v-model="filter_narcotics"/>
+                            <label for="checkbox">Narcotics</label><br><br>
+
+
+                        <p>Neighborhood Name</p>
+                        <input type="checkbox" v-model="it_"/>
+                            <label for="checkbox">Incident Type 1</label><br>
+                        
+                        <label for="date">Start Date<br>
+                            <input type="date" v-model="filter_start"/>
+                        </label>
+                        <label for="date">End Date<br>
+                            <input type="date" v-model="filter_end"/>
+                        </label>
+                        <label for="number">Max Incidents<br>
+                            <input type="number" v-model="filter_limit"/>
+                        </label>
+
+                        <button type="button" @click="applyFilters">Apply Filters</button>
+                        
                     </div>
                 </div>
             </div>
@@ -303,13 +529,13 @@ function searchMap() {
                     </tr>
                 </thead>
                 <tbody id="crime-tbody">
-                    <tr v-for="inc in incidents" :style="categorizeCrime(inc.incident_type)">
+                    <tr v-for="inc in incidents" :style="categorizeCrime(inc.incident_type)" @click="selectCrime(inc.case_number, inc.block, inc.date, inc.time, inc.incident_type)">
                         <td>{{ inc.case_number }}</td>
                         <td>{{ inc.date }}</td>
                         <td>{{ inc.time }}</td>
                         <td>{{ inc.code }}</td>
-                        <td>{{ inc.type }}</td>
-                        <td>{{ inc.neighborhood }}</td>
+                        <td>{{ inc.incident_type }}</td>
+                        <td>{{ inc.neighborhood_name }}</td>
                         <td>{{ inc.block }}</td>
                         <td><button class="delete" @click.stop="deleteIncident(inc.case_number)">Delete</button></td>
                     </tr>
