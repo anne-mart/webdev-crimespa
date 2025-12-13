@@ -7,6 +7,7 @@ let dialog_closed = ref(false);
 let incidents = ref([]);
 let map_search_text = ref('');
 let map_search_loading = ref(false);
+let incidents_loading = ref(false);
 let selectedMarker = null;
 
 let filter_murder = ref(false);
@@ -17,6 +18,25 @@ let filter_theft = ref(false);
 let filter_arson = ref(false);
 let filter_graffiti = ref(false);
 let filter_narcotics = ref(false);
+
+let neighborhood_1 = ref(false);
+let neighborhood_2 = ref(false);
+let neighborhood_3 = ref(false);
+let neighborhood_4 = ref(false);
+let neighborhood_5 = ref(false);
+let neighborhood_6 = ref(false);
+let neighborhood_7 = ref(false);
+let neighborhood_8 = ref(false);
+let neighborhood_9 = ref(false);
+let neighborhood_10 = ref(false);
+let neighborhood_11 = ref(false);
+let neighborhood_12 = ref(false);
+let neighborhood_13 = ref(false);
+let neighborhood_14 = ref(false);
+let neighborhood_15 = ref(false);
+let neighborhood_16 = ref(false);
+let neighborhood_17 = ref(false);
+
 
 
 let map = reactive(
@@ -90,6 +110,7 @@ onMounted(() => {
 async function initializeCrimes() {
     // TODO: get code and neighborhood data
     //       get initial 1000 crimes
+    incidents_loading.value = true;
     fetch(`${crime_url.value}/incidents-expanded`)
         .then(res => res.json())
         .then(data => {
@@ -99,6 +120,7 @@ async function initializeCrimes() {
         .catch((error) => {
             console.log('Error:', error);
         });
+    incidents_loading.value = false;
 }
 
 // Function called when user presses 'OK' on dialog box
@@ -294,7 +316,7 @@ async function submitForm (e) {
         // Refresh data on map + table
         const crimeRes = await fetch('/incidents-expanded');
         incidents = await crimeRes.json();
-        update();
+        initializeCrimes();
 
         e.target.reset();
 
@@ -356,11 +378,40 @@ function applyFilters() {
     }
     if (codes.length !== 0) {
         codes = 'code='+codes.toString();
+    } else {
+        codes = '';
     }
+
+    let neighborhoods = [];
+    if (neighborhood_1.value) neighborhoods.push(1);
+    if (neighborhood_2.value) neighborhoods.push(2);
+    if (neighborhood_3.value) neighborhoods.push(3);
+    if (neighborhood_4.value) neighborhoods.push(4);
+    if (neighborhood_5.value) neighborhoods.push(5);
+    if (neighborhood_6.value) neighborhoods.push(6);
+    if (neighborhood_7.value) neighborhoods.push(7);
+    if (neighborhood_8.value) neighborhoods.push(8);
+    if (neighborhood_9.value) neighborhoods.push(9);
+    if (neighborhood_10.value) neighborhoods.push(10);
+    if (neighborhood_11.value) neighborhoods.push(11);
+    if (neighborhood_12.value) neighborhoods.push(12);
+    if (neighborhood_13.value) neighborhoods.push(13);
+    if (neighborhood_14.value) neighborhoods.push(14);
+    if (neighborhood_15.value) neighborhoods.push(15);
+    if (neighborhood_16.value) neighborhoods.push(16);
+    if (neighborhood_17.value) neighborhoods.push(17);
+    if (neighborhoods.length !== 0) {
+        neighborhoods = 'neighborhood_number='+neighborhoods.toString();
+    } else {
+        neighborhoods = '';
+    }
+
+    
 
     console.log(codes);
     
-    fetch(`${crime_url.value}/incidents-expanded?${codes}`)
+    incidents_loading.value = true;
+    fetch(`${crime_url.value}/incidents-expanded?${codes}&${neighborhoods}`)
         .then(res => res.json())
         .then(data => {
             incidents.value = data;
@@ -369,6 +420,7 @@ function applyFilters() {
         .catch((error) => {
             console.log('Error:', error);
         });
+    incidents_loading.value = false;
 }
 
 
@@ -395,6 +447,9 @@ function applyFilters() {
             </div>
             <div class="cell auto small-12">
                 <a :href="crime_url+'/about.html'" target="_self"><button>About</button></a> 
+            </div>
+            <div class="cell auto small-12">
+                <a :href="crime_url+'/map.html'" target="_self"><button>Map V2 (neighborhood markers and filtering)</button></a> 
             </div>
         </div>
 
@@ -483,8 +538,40 @@ function applyFilters() {
 
 
                         <p>Neighborhood Name</p>
-                        <input type="checkbox" v-model="it_"/>
-                            <label for="checkbox">Incident Type 1</label><br>
+                        <input type="checkbox" v-model="neighborhood_1"/>
+                            <label for="checkbox">Conway/Battlecreek/Highwood</label><br>
+                        <input type="checkbox" v-model="neighborhood_2"/>
+                            <label for="checkbox">Greater East Side</label><br>
+                        <input type="checkbox" v-model="neighborhood_3"/>
+                            <label for="checkbox">West Side</label><br>
+                        <input type="checkbox" v-model="neighborhood_4"/>
+                            <label for="checkbox">Dayton's Bluff</label><br>
+                        <input type="checkbox" v-model="neighborhood_5"/>
+                            <label for="checkbox">Payne/Phalen</label><br>
+                        <input type="checkbox" v-model="neighborhood_6"/>
+                            <label for="checkbox">North End</label><br>
+                        <input type="checkbox" v-model="neighborhood_7"/>
+                            <label for="checkbox">Thomas/Dale (Frogtown)</label><br>
+                        <input type="checkbox" v-model="neighborhood_8"/>
+                            <label for="checkbox">Summit/University</label><br>
+                        <input type="checkbox" v-model="neighborhood_9"/>
+                            <label for="checkbox">West Seventh</label><br>
+                        <input type="checkbox" v-model="neighborhood_10"/>
+                            <label for="checkbox">Como</label><br>
+                        <input type="checkbox" v-model="neighborhood_11"/>
+                            <label for="checkbox">Hamline/Midway</label><br>
+                        <input type="checkbox" v-model="neighborhood_12"/>
+                            <label for="checkbox">St. Anthony</label><br>
+                        <input type="checkbox" v-model="neighborhood_13"/>
+                            <label for="checkbox">Union Park</label><br>
+                        <input type="checkbox" v-model="neighborhood_14"/>
+                            <label for="checkbox">Macalester-Groveland</label><br>
+                        <input type="checkbox" v-model="neighborhood_15"/>
+                            <label for="checkbox">Highland</label><br>
+                        <input type="checkbox" v-model="neighborhood_16"/>
+                            <label for="checkbox">Summit Hill</label><br>
+                        <input type="checkbox" v-model="neighborhood_17"/>
+                            <label for="checkbox">Capitol River</label><br><br>
                         
                         <label for="date">Start Date<br>
                             <input type="date" v-model="filter_start"/>
@@ -506,7 +593,8 @@ function applyFilters() {
         <!-- Incident Table -->
         <div class="custom-card grid-x grid-padding-x grid-padding-y">
             <div class="cell auto small-12">
-                <h2>Crimes in Visible Neighborhoods <span id="count">(loading...)</span></h2>
+                <h2>Crimes in Visible Neighborhoods</h2>
+                <h2 v-if="incidents_loading">loading...</h2>
             </div>
 
             <div id="legend">
