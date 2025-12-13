@@ -40,6 +40,13 @@
 </head>
 <body>
 
+    <nav style="margin-bottom: 15px; text-align: center;">
+        <a href="/about.html" 
+            style="font-size: 18px; color:#2c3e50; text-decoration:none; font-weight:bold;">
+            About the Project
+        </a>
+    </nav>
+
 <h1>St. Paul Crime Map</h1>
 <div id="map"></div>
 <div id="legend">
@@ -49,6 +56,49 @@
 </div>
 
 <h2>Crimes in Visible Neighborhoods <span id="count">(loading...)</span></h2>
+
+<h2>Add New Crime Incident</h2>
+
+<form id="incident-form" style="
+    background:white; padding:15px; border:1px solid #ccc;
+    border-radius:8px; margin-bottom:20px; max-width:600px;">
+    
+    <label>Case Number (required)<br>
+        <input id="f-case" required>
+    </label><br><br>
+
+    <label>Date (YYYY-MM-DD) (required)<br>
+        <input id="f-date" type="date" required>
+    </label><br><br>
+
+    <label>Time (HH:MM) (required)<br>
+        <input id="f-time" type="time" required>
+    </label><br><br>
+
+    <label>Crime Code (required)<br>
+        <input id="f-code" type="number" required>
+    </label><br><br>
+
+    <label>Incident Type (required)<br>
+        <input id="f-incident" required>
+    </label><br><br>
+
+    <label>Police Grid (required)<br>
+        <input id="f-grid" type="number" required>
+    </label><br><br>
+
+    <label>Neighborhood # (required)<br>
+        <input id="f-hood" type="number" required>
+    </label><br><br>
+
+    <label>Block (required)<br>
+        <input id="f-block" required>
+    </label><br><br>
+
+    <button type="submit" style="padding:8px 18px;">Submit</button>
+</form>
+
+<div id="form-message" style="font-weight:bold; margin-bottom:20px;"></div>
 
 <table>
     <thead>
@@ -60,6 +110,7 @@
             <th>Type</th>
             <th>Neighborhood</th>
             <th>Block</th>
+            <th>Delete</th>
         </tr>
     </thead>
     <tbody id="crime-tbody"></tbody>
@@ -67,6 +118,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+    let selectedMarker = null;
     const map = L.map('map').setView([44.9537, -93.0900], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
@@ -149,7 +201,8 @@
         crimes.slice(0, 200).forEach(c => {
             const color = categorizeCrime(c.incident_type);
             tbody.innerHTML += `
-                <tr style="background-color:${color}">
+                <tr style="background-color:${color}; cursor:pointer;"
+                    onclick="selectCrime(${c.case_number}, '${c.block}', '${c.date}', '${c.time}', '${c.incident_type}')">
                     <td>${c.case_number}</td>
                     <td>${c.date}</td>
                     <td>${c.time}</td>
@@ -157,6 +210,13 @@
                     <td>${c.incident_type}</td>
                     <td>${c.neighborhood_name}</td>
                     <td>${c.block}</td>
+                    <td>
+                        <button 
+                            onclick="event.stopPropagation(); deleteIncident('${c.case_number}')"
+                            style="background:#c0392b; color:white; border:none; padding:6px 12px; border-radius:5px; cursor:pointer;">
+                            Delete
+                        </button>
+                    </td>
                 </tr>`;
         });
         document.getElementById('count').textContent = `(${crimes.length} visible)`;
@@ -187,6 +247,169 @@
 
     start();
     map.on('moveend', update);
+
+    // FORM HANDLING — PUT /new-incident
+document.getElementById("incident-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const msg = document.getElementById("form-message");
+    msg.textContent = "";
+
+    // Collect form fields
+    const data = {
+        case_number: document.getElementById("f-case").value.trim(),
+        date: document.getElementById("f-date").value,
+        time: document.getElementById("f-time").value,
+        code: document.getElementById("f-code").value,
+        incident: document.getElementById("f-incident").value.trim(),
+        police_grid: document.getElementById("f-grid").value,
+        neighborhood_number: document.getElementById("f-hood").value,
+        block: document.getElementById("f-block").value.trim()
+    };
+
+    // Validate (simple)
+    for (let key in data) {
+        if (!data[key]) {
+            msg.style.color = "red";
+            msg.textContent = `Error: Missing required field "${key}"`;
+            return;
+        }
+    }
+
+    // PUT request
+    try {
+        const res = await fetch('/new-incident', {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            msg.style.color = "red";
+            msg.textContent = "Upload failed: " + err.error;
+            return;
+        }
+
+        msg.style.color = "green";
+        msg.textContent = "Incident successfully added!";
+
+        // Refresh data on map + table
+        const crimeRes = await fetch('/incidents-expanded');
+        allCrimes = await crimeRes.json();
+        update();
+
+        e.target.reset();
+
+    } catch (err) {
+        msg.style.color = "red";
+        msg.textContent = "Network error: " + err;
+    }
+});
+
+async function deleteIncident(caseNumber) {
+    if (!confirm(`Delete incident ${caseNumber}?`)) return;
+
+    try {
+        const response = await fetch("/remove-incident", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ case_number: caseNumber })
+        });
+
+        const text = await response.text();
+
+        if (text === "success") {
+            alert("Incident deleted!");
+
+            // Refresh list
+            const crimeRes = await fetch('/incidents-expanded');
+            allCrimes = await crimeRes.json();
+            update();
+        } else {
+            alert("Delete failed: " + text);
+        }
+    } catch (err) {
+        alert("Network error: " + err);
+    }
+}
+async function selectCrime(caseNumber, block, date, time, incident) {
+    // Remove old marker if it exists
+    if (selectedMarker) {
+        map.removeLayer(selectedMarker);
+        selectedMarker = null;
+    }
+
+    // Convert "98X UNIVERSITY AV W" → "980 UNIVERSITY AV W"
+    const cleanedAddress = cleanAddress(block);
+
+    // Geocode the address (using Nominatim)
+    const geo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanedAddress + ", St Paul MN")}`);
+    const results = await geo.json();
+
+    if (results.length === 0) {
+        alert("Could not locate address on map: " + cleanedAddress);
+        return;
+    }
+
+    const { lat, lon } = results[0];
+
+    // Custom marker icon (blue)
+    const icon = L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
+    });
+
+    selectedMarker = L.marker([lat, lon], { icon }).addTo(map);
+
+    selectedMarker.bindPopup(`
+        <b>${incident}</b><br>
+        Date: ${date}<br>
+        Time: ${time}<br>
+        Location: ${cleanedAddress}<br><br>
+        <button onclick="deleteIncident('${caseNumber}')"
+                style="background:#c0392b; color:white; border:none; padding:6px 12px; border-radius:5px; cursor:pointer;">
+            Delete Incident
+        </button>
+    `).openPopup();
+
+    map.setView([lat, lon], 16);
+}
+
+function cleanAddress(raw) {
+    let address = raw.trim();
+    if (/ AND /i.test(address) || / & /i.test(address)) {
+        let sep = / AND /i.test(address) ? / AND /i : / & /i;
+        let [street1, street2] = address.split(sep).map(s => s.trim());
+        if (!/\b(ST|AVE|AV|RD|DR|BLVD|LN|PKWY|PL|CT|WAY)\b/i.test(street2)) {
+            street2 += " AVE";
+        }
+        address = `${street1} & ${street2}`;
+    }
+    let parts = address.split(" ");
+    if (parts.length > 0) {
+        let num = parts[0];
+        if (/^\d+X$/.test(num)) {
+            num = num.replace("X", "0");
+        } else if (/^\d+X+$/.test(num)) {
+            num = num.replace(/X+/g, match => "0".repeat(match.length));
+        }
+        parts[0] = num;
+    }
+    const dirMap = { N:"NORTH", S:"SOUTH", E:"EAST", W:"WEST" };
+    parts = parts.map(tok => dirMap[tok.toUpperCase()] || tok);
+    parts = parts.map(tok => {
+        if (/^(ST|MT|FT)[A-Z]{2,}/.test(tok)) {
+            return tok.slice(0, tok.match(/^(ST|MT|FT)/)[0].length) + " " + tok.slice(tok.match(/^(ST|MT|FT)/)[0].length);
+        }
+        return tok;
+    });
+
+    return parts.join(" ");
+}
+
 </script>
 
 </body>

@@ -3,6 +3,7 @@ import * as url from 'node:url';
 
 import { default as express } from 'express';
 import { default as sqlite3 } from 'sqlite3';
+import cors from 'cors';
 
 let public_dir = './public';
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
@@ -10,9 +11,8 @@ const dbFile = path.join(__dirname, 'db', 'stpaul_crime.sqlite3');
 
 const port = 8080;
 
-// let app = express();
-// app.use(express.json());
 let app = express();
+app.use(cors());
 app.use(express.static(public_dir));
 app.use(express.json());
 app.use('/data', express.static(path.join(__dirname, 'data')));
@@ -46,9 +46,43 @@ app.get('/incidents-expanded', (req, res) => {
         FROM Incidents i
         JOIN Neighborhoods n ON i.neighborhood_number = n.neighborhood_number
         JOIN Codes c ON i.code = c.code
-        ORDER BY i.date_time DESC
-        LIMIT 1000;
     `;
+
+    
+    let first = true;
+    // WHERE ... AND ... AND ...
+    if (!!req.query.case_number) { //YYYY-MM-DD
+        sql += (first ? ' WHERE' : ' AND') + ` i.case_number = '${req.query.case_number}'`;
+        first = false;
+    }
+    if (!!req.query.start_date) { //YYYY-MM-DD
+        sql += (first ? ' WHERE' : ' AND') + ` DATE(date_time) >= '${req.query.start_date}'`;
+        first = false;
+    }
+    if (!!req.query.end_date) { //YYYY-MM-DD
+        sql += (first ? ' WHERE' : ' AND') + ` DATE(date_time) <= '${req.query.end_date}'`;
+        first = false;
+    }
+    if (!!req.query.code) {
+        sql += (first ? ' WHERE' : ' AND') + ` i.code IN (${req.query.code})`;
+        first = false;
+    }
+    if (!!req.query.grid) {
+        sql += (first ? ' WHERE' : ' AND') + ` i.police_grid IN (${req.query.grid})`;
+        first = false;
+    }
+    if (!!req.query.neighborhood) {
+        sql += (first ? ' WHERE' : ' AND') + ` i.neighborhood_number IN (${req.query.neighborhood})`;
+        first = false;
+    }
+
+    // ORDER BY
+    sql += ' ORDER BY date_time DESC';
+
+    // LIMIT
+    sql += (!!req.query.limit) ? ` LIMIT ${req.query.limit}` : ' LIMIT 1000';
+
+
 
     db.all(sql, [], (err, rows) => {
         if (err) {

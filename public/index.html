@@ -21,6 +21,7 @@
     <body>
         <h1>St. Paul Crime Incidents</h1>
         <div id="app"></div>
+        <script type="module" src="src/main.js"></script>
         <!-- Remove Incident Section -->
         <div>
             <label for="case_input">Case Number to Remove:</label>
@@ -28,6 +29,13 @@
             <button id="remove-btn" type="button">Remove Incident</button>
             <p id="remove-result"></p>
         </div>
+
+        <!-- Incident Filters -->
+         <button type="button" @click="showHideFilters" v-if="show_filters">Hide Filters ^</button>
+         <button type="button" @click="showHideFilters" v-if="!show_filters">Show Filters v</button>
+         <div v-if="show_filters">
+            <h1>Filters</h1>
+         </div>
 
         <!-- Incident Table -->
         <table>
