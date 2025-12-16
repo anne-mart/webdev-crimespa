@@ -44,14 +44,14 @@ app.get('/incidents-expanded', (req, res) => {
             n.neighborhood_name,
             i.block
         FROM Incidents i
-        JOIN Neighborhoods n ON i.neighborhood_number = n.neighborhood_number
-        JOIN Codes c ON i.code = c.code
+        LEFT JOIN Neighborhoods n ON i.neighborhood_number = n.neighborhood_number
+        LEFT JOIN Codes c ON i.code = c.code
     `;
 
     
     let first = true;
     // WHERE ... AND ... AND ...
-    if (!!req.query.case_number) { //YYYY-MM-DD
+    if (!!req.query.case_number) {
         sql += (first ? ' WHERE' : ' AND') + ` i.case_number = '${req.query.case_number}'`;
         first = false;
     }

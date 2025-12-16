@@ -16,7 +16,7 @@ let filter_assault = ref(false);
 let filter_burglary = ref(false);
 let filter_theft = ref(false);
 let filter_arson = ref(false);
-let filter_graffiti = ref(false);
+let filter_vandalism = ref(false);
 let filter_narcotics = ref(false);
 
 let neighborhood_1 = ref(false);
@@ -37,6 +37,11 @@ let neighborhood_15 = ref(false);
 let neighborhood_16 = ref(false);
 let neighborhood_17 = ref(false);
 
+let filter_start = ref(null);
+let filter_end = ref(null);
+let filter_limit = ref(0);
+
+let neighborhoodLayer = null;
 
 
 let map = reactive(
@@ -74,8 +79,6 @@ let map = reactive(
     }
 );
 
-//let markers = L.layerGroup().addTo(map);
-
 // Vue callback for once <template> HTML has been added to web page
 onMounted(() => {
     // Create Leaflet map (set bounds and valied zoom levels)
@@ -88,34 +91,49 @@ onMounted(() => {
     map.leaflet.setMaxBounds([[44.883658, -93.217977], [45.008206, -92.993787]]);
 
     // Get boundaries for St. Paul neighborhoods
-    let district_boundary = new L.geoJson();
-    district_boundary.addTo(map.leaflet);
+    map.district_boundary = L.geoJson(null, {
+        style: { color: "#3498db", weight: 2, fillOpacity: 0.1 },
+        onEachFeature: (feature, layer) => {
+            const p = feature.properties || {};
+            const number = Number(p.district);
+            const name = p.name1 || "Unknown";
+            layer._hoodNumber = number;
+            layer.bindTooltip(name, { permanent: false, sticky: true, direction: "center" });
+        }
+    }).addTo(map.leaflet);
+
+    // create layer group for neighborhood markers
+    neighborhoodLayer = L.layerGroup().addTo(map.leaflet);
+
     fetch('data/StPaulDistrictCouncil.geojson')
     .then((response) => {
         return response.json();
     })
     .then((result) => {
-        result.features.forEach((value) => {
-            district_boundary.addData(value);
-        });
+        map.district_boundary.addData(result);
+        updateMap();
     })
     .catch((error) => {
         console.log('Error:', error);
     });
+    
+    map.leaflet.on('moveend', updateMap);
 });
 
 
 // FUNCTIONS
 // Function called once user has entered REST API URL
-async function initializeCrimes() {
+async function getIncidents() {
     // TODO: get code and neighborhood data
     //       get initial 1000 crimes
     incidents_loading.value = true;
+    incidents.value = [];
     fetch(`${crime_url.value}/incidents-expanded`)
         .then(res => res.json())
         .then(data => {
             incidents.value = data;
             console.log(incidents.value);
+            if (map.leaflet) updateMap();
         })
         .catch((error) => {
             console.log('Error:', error);
@@ -131,7 +149,7 @@ function closeDialog() {
         dialog_err.value = false;
         dialog.close();
         dialog_closed.value = true;
-        initializeCrimes();
+        getIncidents();
     }
     else {
         dialog_err.value = true;
@@ -139,6 +157,11 @@ function closeDialog() {
 }
 
 function categorizeCrime(type) {
+    // If `type` is missing 
+    if (!type || typeof type !== 'string') {
+        type = "NULL";
+    }
+
     const t = type.toUpperCase();
 
     // Violent crimes ... light red
@@ -182,7 +205,7 @@ async function deleteIncident(caseNumber) {
         if (text === "success") {
             alert("Incident deleted!");
 
-            initializeCrimes();
+            getIncidents();
         } else {
             alert("Delete failed: " + text);
         }
@@ -314,9 +337,7 @@ async function submitForm (e) {
         msg.textContent = "Incident successfully added!";
 
         // Refresh data on map + table
-        const crimeRes = await fetch('/incidents-expanded');
-        incidents = await crimeRes.json();
-        initializeCrimes();
+        getIncidents();
 
         e.target.reset();
 
@@ -340,6 +361,7 @@ function searchMap() {
             map.leaflet.fitBounds([[data[0].boundingbox[0], data[0].boundingbox[2]], [data[0].boundingbox[1], data[0].boundingbox[3]]]);
             map_search_loading.value = false;
         })
+    map_search_loading.value = false;
 }
 
 function applyFilters() {
@@ -368,7 +390,7 @@ function applyFilters() {
         for (let i = 900; i < 1000; i++)
             codes.push(i);
     }
-    if (filter_graffiti.value) {
+    if (filter_vandalism.value) {
         for (let i = 1400; i < 1500; i++)
             codes.push(i);
     }
@@ -401,27 +423,69 @@ function applyFilters() {
     if (neighborhood_16.value) neighborhoods.push(16);
     if (neighborhood_17.value) neighborhoods.push(17);
     if (neighborhoods.length !== 0) {
-        neighborhoods = 'neighborhood_number='+neighborhoods.toString();
+        neighborhoods = 'neighborhood='+neighborhoods.toString();
     } else {
         neighborhoods = '';
     }
 
-    
+    let start_date = filter_start.value ? `start_date=${filter_start.value}` : '';
+    let end_date = filter_end.value ? `end_date=${filter_end.value}` : '';
 
-    console.log(codes);
-    
+    let limit = filter_limit.value > 0 ? `limit=${filter_limit.value}` : '';
+
     incidents_loading.value = true;
-    fetch(`${crime_url.value}/incidents-expanded?${codes}&${neighborhoods}`)
+    incidents.value = [];
+    fetch(`${crime_url.value}/incidents-expanded?${codes}&${neighborhoods}&${start_date}&${end_date}&${limit}`)
         .then(res => res.json())
         .then(data => {
             incidents.value = data;
-            console.log(incidents.value);
+            if (map.leaflet) updateMap();
         })
         .catch((error) => {
             console.log('Error:', error);
         });
     incidents_loading.value = false;
 }
+
+
+
+
+function getVisibleHoods() {
+    if (!map.leaflet || !map.district_boundary) return [];
+    const bounds = map.leaflet.getBounds();
+    const set = new Set();
+    map.district_boundary.eachLayer(layer => {
+        if (layer._hoodNumber && bounds.intersects(layer.getBounds())) {
+            set.add(layer._hoodNumber);
+        }
+    });
+    return Array.from(set);
+}
+
+function updateMap() {
+        const visible = getVisibleHoods();
+        console.log("Visible neighborhoods:", visible);
+        //API CALL ???
+        neighborhoodLayer.clearLayers();
+        const counts = {};
+        incidents.value.forEach(c => {
+            const n = Number(c.neighborhood_number);
+            counts[n] = (counts[n] || 0) + 1;
+        });
+
+        map.district_boundary.eachLayer(layer => {
+            const n = layer._hoodNumber;
+            if (n && counts[n]) {
+                const center = layer.getBounds().getCenter();
+                L.circleMarker(center, {
+                    radius: Math.min(10 + counts[n]/5, 50),
+                    fillOpacity: 0.7,
+                })
+                .bindPopup(`<b>${layer.getTooltip().getContent()}</b><br>${counts[n]} crimes`)
+                .addTo(neighborhoodLayer);
+            }
+        });
+    }
 
 
 
@@ -463,7 +527,7 @@ function applyFilters() {
                 <h2>Search Map</h2>
                 <input type="text" placeholder="enter latitude & longitude coordinates, address, etc." v-model="map_search_text"></input>
                 <button type="button" @click="searchMap">Go</button>
-                <h1 v-if="map_search_loading">loading...</h1>
+                <h2 v-if="map_search_loading" style="text-align: center;">loading...</h2>
             </div>
         </div>
 
@@ -531,8 +595,8 @@ function applyFilters() {
                             <label for="checkbox">Theft</label><br>
                         <input type="checkbox" v-model="filter_arson"/>
                             <label for="checkbox">Arson</label><br>
-                        <input type="checkbox" v-model="filter_graffiti"/>
-                            <label for="checkbox">Graffiti</label><br>
+                        <input type="checkbox" v-model="filter_vandalism"/>
+                            <label for="checkbox">Vandalism</label><br>
                         <input type="checkbox" v-model="filter_narcotics"/>
                             <label for="checkbox">Narcotics</label><br><br>
 
@@ -594,7 +658,8 @@ function applyFilters() {
         <div class="custom-card grid-x grid-padding-x grid-padding-y">
             <div class="cell auto small-12">
                 <h2>Crimes in Visible Neighborhoods</h2>
-                <h2 v-if="incidents_loading">loading...</h2>
+                <h2 v-if="incidents.length === 0">loading...</h2>
+                <h2 v-else >{{ incidents.length }} Crimes Visible</h2>
             </div>
 
             <div id="legend">
@@ -606,6 +671,7 @@ function applyFilters() {
             <table>
                 <thead>
                     <tr>
+                        <th>#</th>
                         <th>Case #</th>
                         <th>Date</th>
                         <th>Time</th>
@@ -617,7 +683,8 @@ function applyFilters() {
                     </tr>
                 </thead>
                 <tbody id="crime-tbody">
-                    <tr v-for="inc in incidents" :style="categorizeCrime(inc.incident_type)" @click="selectCrime(inc.case_number, inc.block, inc.date, inc.time, inc.incident_type)">
+                    <tr v-for="(inc, index) in incidents" :style="categorizeCrime(inc.incident_type)" @click="selectCrime(inc.case_number, inc.block, inc.date, inc.time, inc.incident_type)">
+                        <td>{{ index+1 }}</td>
                         <td>{{ inc.case_number }}</td>
                         <td>{{ inc.date }}</td>
                         <td>{{ inc.time }}</td>
